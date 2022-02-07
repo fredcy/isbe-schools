@@ -6,12 +6,14 @@ import xlrd
 
 # About xlrd, see https://xlrd.readthedocs.io/en/latest/
 
+# See https://www.isbe.net/Documents/key_codes.pdf for some ISBE school codes.
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("isbe")
 
 # These are the fields from the ISBE data that we will copy over into the sqlite database.
-db_fields = ["address", "city", "countyname", "facilityname", "rectype", "zip"]
+db_fields = ["address", "city", "countyname", "facilityname", "rectype", "rcd", "type", "school", "zip"]
 
 rcd_colname = 'Region-2\nCounty-3\nDistrict-4'
 
@@ -70,10 +72,11 @@ def read_excel(args):
             read_count += 1
             school = dict((name, row[field_index[name]]) for name in field_index)
 
-            if not "Sch" in school["rectype"]:
-                continue        # skip non-school entries
-            
-            logger.debug(f"{pformat(school)}")
+            # Skip some non-school items
+            if "Dist" in school["rectype"] or school["rectype"] in ["ROE", "ISC"]:
+                continue
+
+            #logger.debug(f"{pformat(school)}")
 
             try:
                 if not "address" in school:
