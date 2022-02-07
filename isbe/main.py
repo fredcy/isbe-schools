@@ -10,7 +10,18 @@ import xlrd
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("isbe")
 
-db_fields = ["city", "countyname", "facilityname"]
+# These are the fields from the ISBE data that we will copy over into the sqlite database.
+db_fields = ["address", "city", "countyname", "facilityname", "rectype", "zip"]
+
+rcd_colname = 'Region-2\nCounty-3\nDistrict-4'
+
+def normalize_field_name(isbe_name):
+    """ Convert ISBE field name (from header of Excel sheet) to name used in sqlite"""
+    if isbe_name == rcd_colname:
+        return "rcd"
+    else:
+        return isbe_name.lower().replace(" ", "_")
+
 
 def create_table(args):
     field_list = ", ".join(f"{name} text" for name in db_fields)
@@ -24,8 +35,6 @@ def create_table(args):
     con.close()
 
 
-rcd_colname = 'Region-2\nCounty-3\nDistrict-4'
-
 def read_excel(args):
     book = xlrd.open_workbook(args.input)
 
@@ -34,7 +43,8 @@ def read_excel(args):
 
     field_placeholders = ", ".join(f":{n}" for n in db_fields)
     insert_stmt = f"insert into schools values ({field_placeholders})"
-    logger.debug(f"{insert_stmt}")
+
+    sheet_count = read_count = write_count = 0
 
     for sheet_name in book.sheet_names():
         logger.debug(f"sheet: {sheet_name}")
@@ -45,22 +55,46 @@ def read_excel(args):
             logger.debug(f"skipping sheet {sheet_name}")
             continue
 
-        fields = [("rcd" if f == rcd_colname else f.lower().replace(" ", "_")) for f in header_row]
+        sheet_count += 1
+
+        # Get the field names from the header row, converting them to names used in this app
+        fields = [normalize_field_name(f) for f in header_row]
+
         field_index = dict(zip(fields, range(len(fields))))
         
         for rownum in range(1, min(sheet.nrows, 5000000)):
             row = sheet.row_values(rownum)
             if not row[field_index["rcd"]]:
                 continue        # empty row
+
+            read_count += 1
+            school = dict((name, row[field_index[name]]) for name in field_index)
+
+            if not "Sch" in school["rectype"]:
+                continue        # skip non-school entries
             
-            school = dict((field_name, row[field_index[field_name]]) for field_name in field_index)
             logger.debug(f"{pformat(school)}")
 
-            cur.execute(insert_stmt, school)
+            try:
+                if not "address" in school:
+                    school["address"] = school["delivery_address"] or school["mailing_address"]
+            except KeyError:
+                logger.exception(f"address problem: {school}")
+                break
+
+            try:
+                cur.execute(insert_stmt, school)
+            except:
+                logger.exception(f"insert_stmt = {insert_stmt}, school = {school}")
+                break
+                
+            write_count += 1
 
         con.commit()
 
     con.close()
+    logger.info(f"Read {read_count} items from {sheet_count} sheets and wrote {write_count} schools")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Read ISBE school data")
