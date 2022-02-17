@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("isbe")
 
 # These are the fields from the ISBE data that we will copy over into the sqlite database.
-db_fields = ["address", "city", "countyname", "facilityname", "rectype", "rcd", "type", "school", "zip"]
+db_fields = ["address", "city", "countyname", "facilityname", "gradeserved", "rectype", "rcd", "type", "school", "zip"]
 
 rcd_colname = 'Region-2\nCounty-3\nDistrict-4'
 
@@ -37,6 +37,50 @@ def create_table(args):
     con.close()
 
 
+grade_list = ["P", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "U"]
+
+def expand_range(range):
+    grades = set()
+    bounds = range.split("-")
+
+    if len(bounds) == 1:
+        grades = set(bounds)
+
+    elif len(bounds) == 2:
+        first, last = bounds
+        in_range = False
+        for g in grade_list:
+            if g == first:
+                grades.add(g)
+                in_range = True
+            elif g == last:
+                grades.add(g)
+                break
+            elif in_range:
+                grades.add(g)
+            else:
+                # before first or after last
+                pass
+
+    else:
+        logger.error(f"bad range: {range}")
+
+    return grades
+    
+
+def expand_grades(grades_string):
+    logger.debug(f"expand_grades({grades_string})")
+    grades = set()
+    ranges = grades_string.split(",")
+    logger.debug(f"ranges = {ranges}")
+    for range in ranges:
+        range_grades = expand_range(range)
+        grades.update(range_grades)
+
+    logger.debug(f"--> {grades}")
+    return grades
+
+
 def read_excel(args):
     book = xlrd.open_workbook(args.input)
 
@@ -48,8 +92,16 @@ def read_excel(args):
 
     sheet_count = read_count = write_count = 0
 
+    # Those sheets and grades of interest for IMSA events, per Rich Busby
+    sheets_of_interest = ["Public Dist & Sch", "Non Pub Sch"]
+    grades_of_interest = set(["7", "8", "9"])
+
     for sheet_name in book.sheet_names():
+        if not (any(s for s in sheets_of_interest if s in sheet_name)):
+            continue
+
         logger.debug(f"sheet: {sheet_name}")
+        
         sheet = book.sheet_by_name(sheet_name)
 
         header_row = sheet.row_values(0)
@@ -76,8 +128,13 @@ def read_excel(args):
             if "Dist" in school["rectype"] or school["rectype"] in ["ROE", "ISC"]:
                 continue
 
-            #logger.debug(f"{pformat(school)}")
+            # Skip schools not serving grades of interest
+            grades = expand_grades(school["gradeserved"])
+            if not grades.intersection(grades_of_interest):
+                logger.info(f"skipping: grades = {grades}")
+                continue
 
+            # Construct canonical 'address' value
             try:
                 if not "address" in school:
                     school["address"] = school["delivery_address"] or school["mailing_address"]
@@ -85,6 +142,7 @@ def read_excel(args):
                 logger.exception(f"address problem: {school}")
                 break
 
+            # Insert the school data into the database
             try:
                 cur.execute(insert_stmt, school)
             except:
