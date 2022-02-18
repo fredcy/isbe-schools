@@ -40,13 +40,19 @@ def create_table(args):
 grade_list = ["P", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "U"]
 
 def expand_range(range):
+    """Given a string representation of a range of grades, like "K-5" or "P", return
+    the equivalent set of grade values (from above `grade_list`)
+
+    """
     grades = set()
     bounds = range.split("-")
 
     if len(bounds) == 1:
+        # a single value, like "7"
         grades = set(bounds)
 
     elif len(bounds) == 2:
+        # a range, like "6-8"
         first, last = bounds
         in_range = False
         for g in grade_list:
@@ -69,15 +75,17 @@ def expand_range(range):
     
 
 def expand_grades(grades_string):
-    logger.debug(f"expand_grades({grades_string})")
+    """Given a string representation of a set of grades, return the actual set of
+    values.  E.g., `"1,7-9"` becomes `set(["1", "7", "8", "9"])`
+
+    """
     grades = set()
     ranges = grades_string.split(",")
-    logger.debug(f"ranges = {ranges}")
     for range in ranges:
         range_grades = expand_range(range)
         grades.update(range_grades)
 
-    logger.debug(f"--> {grades}")
+    logger.debug(f"expand_grades({grades_string}) --> {grades}")
     return grades
 
 
@@ -131,7 +139,7 @@ def read_excel(args):
             # Skip schools not serving grades of interest
             grades = expand_grades(school["gradeserved"])
             if not grades.intersection(grades_of_interest):
-                logger.info(f"skipping: grades = {grades}")
+                logger.debug(f"skipping: grades = {school['gradeserved']}")
                 continue
 
             # Construct canonical 'address' value
