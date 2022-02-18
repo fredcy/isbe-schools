@@ -13,12 +13,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("isbe")
 
 # These are the fields from the ISBE data that we will copy over into the sqlite database.
-db_fields = ["address", "city", "countyname", "facilityname", "gradeserved", "rectype", "rcd", "type", "school", "zip"]
+db_fields = [
+    "address",
+    "city",
+    "countyname",
+    "facilityname",
+    "gradeserved",
+    "rectype",
+    "rcd",
+    "type",
+    "school",
+    "zip",
+]
 
-rcd_colname = 'Region-2\nCounty-3\nDistrict-4'
+rcd_colname = "Region-2\nCounty-3\nDistrict-4"
+
 
 def normalize_field_name(isbe_name):
-    """ Convert ISBE field name (from header of Excel sheet) to name used in sqlite"""
+    """Convert ISBE field name (from header of Excel sheet) to name used in sqlite"""
     if isbe_name == rcd_colname:
         return "rcd"
     else:
@@ -29,7 +41,7 @@ def create_table(args):
     field_list = ", ".join(f"{name} text" for name in db_fields)
     q = f"create table if not exists schools ( {field_list} )"
     logger.debug(f"{q}")
-    
+
     con = sqlite3.connect(args.db)
     cur = con.cursor()
     cur.execute(q)
@@ -37,7 +49,24 @@ def create_table(args):
     con.close()
 
 
-grade_list = ["P", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "U"]
+grade_list = [
+    "P",
+    "K",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "U",
+]
+
 
 def expand_range(range):
     """Given a string representation of a range of grades, like "K-5" or "P", return
@@ -72,7 +101,7 @@ def expand_range(range):
         logger.error(f"bad range: {range}")
 
     return grades
-    
+
 
 def expand_grades(grades_string):
     """Given a string representation of a set of grades, return the actual set of
@@ -109,7 +138,7 @@ def read_excel(args):
             continue
 
         logger.debug(f"sheet: {sheet_name}")
-        
+
         sheet = book.sheet_by_name(sheet_name)
 
         header_row = sheet.row_values(0)
@@ -123,11 +152,11 @@ def read_excel(args):
         fields = [normalize_field_name(f) for f in header_row]
 
         field_index = dict(zip(fields, range(len(fields))))
-        
+
         for rownum in range(1, min(sheet.nrows, 5000000)):
             row = sheet.row_values(rownum)
             if not row[field_index["rcd"]]:
-                continue        # empty row
+                continue  # empty row
 
             read_count += 1
             school = dict((name, row[field_index[name]]) for name in field_index)
@@ -145,7 +174,9 @@ def read_excel(args):
             # Construct canonical 'address' value
             try:
                 if not "address" in school:
-                    school["address"] = school["delivery_address"] or school["mailing_address"]
+                    school["address"] = (
+                        school["delivery_address"] or school["mailing_address"]
+                    )
             except KeyError:
                 logger.exception(f"address problem: {school}")
                 break
@@ -156,13 +187,15 @@ def read_excel(args):
             except:
                 logger.exception(f"insert_stmt = {insert_stmt}, school = {school}")
                 break
-                
+
             write_count += 1
 
         con.commit()
 
     con.close()
-    logger.info(f"Read {read_count} items from {sheet_count} sheets and wrote {write_count} schools")
+    logger.info(
+        f"Read {read_count} items from {sheet_count} sheets and wrote {write_count} schools"
+    )
 
 
 def main():
@@ -185,4 +218,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
