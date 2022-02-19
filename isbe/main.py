@@ -19,10 +19,13 @@ db_fields = [
     "countyname",
     "facilityname",
     "gradeserved",
+    "nces_id",
     "rectype",
     "rcd",
     "type",
     "school",
+    "strep",
+    "stsen",
     "zip",
 ]
 
@@ -46,6 +49,10 @@ def create_table(args):
     cur = con.cursor()
     cur.execute(q)
     con.commit()
+
+    cur.execute("delete from schools")
+    con.commit()
+
     con.close()
 
 
@@ -180,6 +187,9 @@ def read_excel(args):
             except KeyError:
                 logger.exception(f"address problem: {school}")
                 break
+
+            if not "nces_id" in school:
+                school["nces_id"] = ""
 
             # Insert the school data into the database
             try:
