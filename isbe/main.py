@@ -1,5 +1,6 @@
 import argparse
 import logging
+import openpyxl
 import os
 import os.path
 from pprint import pformat, pprint
@@ -232,6 +233,50 @@ def download(args):
     logger.info(f"saved into {args.input}")
 
 
+def create(args):
+    logger.debug(f"create({args})")
+
+    con = sqlite3.connect(args.db)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    logger.info(f"Reading {args.db}")
+    cur.execute("select * from schools")
+
+    book = openpyxl.Workbook()
+    sheet = book.active
+
+    cols = [
+        "countyname",
+        "rcd",
+        "facilityname",
+        "city",
+        "zip",
+        "strep",
+        "stsen",
+        "nces_id",
+    ]
+    sheet.append(colname for colname in cols)
+
+    def colval(row, colname):
+        if colname in ["strep", "stsen"]:
+            if row[colname] == "":
+                return ""
+            else:
+                return int(row[colname])
+        else:
+            return row[colname]
+
+    write_count = 0
+    for row in cur:
+        # logger.debug(f"row = {pformat(dict(row))}")
+        sheet.append(colval(row, colname) for colname in cols)
+        write_count += 1
+
+    book.save(args.output)
+    con.close()
+    logger.info(f"Wrote {write_count} schools to {args.output}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Read ISBE school data")
     parser.add_argument("-d", "--debug", action="store_true")
@@ -264,6 +309,17 @@ def main():
         help=f"Grade levels of interest (default: {grades_default})",
     )
     parser_load.set_defaults(func=load)
+
+    parser_create = subparsers.add_parser(
+        "create", help="Create filtered workbook of schools"
+    )
+    output_default = "data/generated.xlsx"
+    parser_create.add_argument(
+        "--output",
+        default=output_default,
+        help=f"Generated workbook (default: {output_default})",
+    )
+    parser_create.set_defaults(func=create)
 
     args = parser.parse_args()
 

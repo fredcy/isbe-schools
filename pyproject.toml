@@ -7,6 +7,7 @@ authors = ["Fred Yankowski <fcy@imsa.edu>"]
 [tool.poetry.dependencies]
 python = "^3.7"
 xlrd = "^2.0.1"
+openpyxl = "^3.0.9"
 
 [tool.poetry.dev-dependencies]
 black = "^22.1.0"
