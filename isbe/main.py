@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import os.path
 from pprint import pformat, pprint
 import sqlite3
 import xlrd
@@ -138,11 +140,11 @@ def read_excel(args):
 
     # Those sheets and grades of interest for IMSA events, per Rich Busby
     sheets_of_interest = ["Public Dist & Sch", "Non Pub Sch"]
-    grades_of_interest = set(["7", "8", "9"])
+    grades_of_interest = expand_grades(args.grades)
 
     for sheet_name in book.sheet_names():
-        if not (any(s for s in sheets_of_interest if s in sheet_name)):
-            continue
+        # if not (any(s for s in sheets_of_interest if s in sheet_name)):
+        #    continue
 
         logger.debug(f"sheet: {sheet_name}")
 
@@ -204,17 +206,64 @@ def read_excel(args):
 
     con.close()
     logger.info(
-        f"Read {read_count} items from {sheet_count} sheets and wrote {write_count} schools"
+        f"Read {read_count} items from {sheet_count} sheets in {args.input} and wrote {write_count} schools to {args.db} for grades {args.grades}"
     )
+
+
+def load(args):
+    create_table(args)
+    read_excel(args)
+
+
+import urllib.request
+
+ISBE_URL = "https://www.isbe.net/_layouts/Download.aspx?SourceUrl=/Documents/dir_ed_entities.xls"
+
+
+def download(args):
+    logger.debug(f"download({args})")
+
+    dirname = os.path.dirname(args.input)
+    if not os.path.exists(dirname):
+        logger.info(f"creating directory {dirname}")
+        os.makedirs(dirname)
+
+    urllib.request.urlretrieve(ISBE_URL, args.input)
+    logger.info(f"saved into {args.input}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Read ISBE school data")
     parser.add_argument("-d", "--debug", action="store_true")
     input_default = "data/dir_ed_entities.xls"
-    parser.add_argument("--input", default=input_default, help="Excel workbook name")
+    parser.add_argument(
+        "--input",
+        default=input_default,
+        help=f"Excel workbook name (default: {input_default})",
+    )
     db_default = "schools.db"
-    parser.add_argument("--db", default=db_default, help="Sqlite3 db file")
+    parser.add_argument(
+        "--db", default=db_default, help=f"Sqlite3 db file (default: {db_default})"
+    )
+    parser.set_defaults(func=lambda args: parser.print_help())
+
+    subparsers = parser.add_subparsers()
+
+    parser_download = subparsers.add_parser(
+        "download", help="Download ISBE school data as Excel workbook"
+    )
+    parser_download.set_defaults(func=download)
+
+    parser_load = subparsers.add_parser(
+        "load", help="Load database from Excel workbook"
+    )
+    grades_default = "7-9"
+    parser_load.add_argument(
+        "--grades",
+        default=grades_default,
+        help=f"Grade levels of interest (default: {grades_default})",
+    )
+    parser_load.set_defaults(func=load)
 
     args = parser.parse_args()
 
@@ -222,8 +271,7 @@ def main():
         logger.setLevel(logging.DEBUG)
     logger.debug(f"args = {args}")
 
-    create_table(args)
-    read_excel(args)
+    args.func(args)
 
 
 if __name__ == "__main__":
